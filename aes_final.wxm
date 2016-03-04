@@ -1,0 +1,535 @@
+/* [wxMaxima batch file version 1] [ DO NOT EDIT BY HAND! ]*/
+/* [ Created with wxMaxima version 13.04.2 ] */
+
+/* [wxMaxima: title   start ]
+Implementación de AES usando el paquete "gf.mac"
+
+Germán Martínez Maldonado
+Pablo Sánchez Robles
+   [wxMaxima: title   end   ] */
+
+/* [wxMaxima: comment start ]
+AES (Advanced Encryption Standard) es un esquema de cifrado por bloques basado en el cifrado Rijndael. La mayoria de los 
+cálculos del algoritmo AES se realizan en un campo finito, así que para simplificar los cálculos vamos a usar el paquete 
+"gf.mac", que ya cuenta con una gran cantidad de funciones que nos permitirán realizar operaciones aritméticas directamente 
+operando en un campo finito determinado.
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: input   start ] */
+numer:true;
+load(gf);
+load(bitwise);
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: comment start ]
+Para definir el cuerpo finito en el que vamos a trabajar tenemos que basarnos en un número primo y un polinomio irreducible,
+definimos esos parámetros del cuerpo finito con la función "gf_set_data(2,8,x^8+x^4+x^3+x+1)".
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: input   start ] */
+gf_set_data(2,8,x^8+x^4+x^3+x+1);
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: title   start ]
+S-caja
+   [wxMaxima: title   end   ] */
+
+/* [wxMaxima: comment start ]
+La S-caja es una matriz que se usa para realizar substituciones durante el cifrado, para así dificultar la relación entre
+la clave usada para el cifrado y el propio texto cifrado. En el caso del algoritmo AES la S-caja es generada al realizar en 
+GF(2^8) la multiplicación del inverso del polinonio en dicho cuerpo finito correspondiente a un número dado con el polinomio
+p1:x^4+x^3+x^2+x+1, y el resultado de esta operación sumado, con el polinomio x^6+x^5+x+1.
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: comment start ]
+Comentarios:
+    -1: primero establecemos una matriz de ceros de una dimensión 16x16. Esta será la matriz en la que iremos almacenando
+        nuestra S-caja.
+    -2: iniciamos el bucle con el que en cada iteración calcularemos el valor correspondiente de la S-caja.
+    -3: para poder realizar las siguientes operaciones, primero usamos el comando "gf_minimal_set(2,x^8+x^4+x^3+x+1)" 
+        indicando el cuerpo finito con el que estamos trabajando. 
+    -4: con la función "gf_n2p" obtenemos el polinomio en el cuerpo finito correspondiente al indice actual. Como es una 
+        matriz de 16 filas por 16 columnas, usaremos la formula "((i-1)*16+j)-1" para conocer el índice actual del que
+        queremos obtener el polinomio.
+    -5: calculamos el inverso en el cuerpo finito del polinomio que acabamos de obtener mediante la función "gf_inv". Si
+        el polinomio es "0", no lo calculamos porque su valor es "0".
+    -6: ahora cambiamos el cuerpo finito en el que trabajamos al polinomio "x^8+1" con la función "gf_minimal_set(2,x^8+1)"
+    -7: definimos los polinomios con los que vamos a operar: p1:x^4+x^3+x^2+x+1 y p2:x^6+x^5+x+1.
+    -8: realizamos las operaciones: "gf_mult(p1,inv)" realiza la multiplicación del primer polinomio con el inverso y 
+        "gf_add" realiza la suma del resultado de la operación anterior con el segundo polinomio.
+    -9: finalmente guardamos el resultado obtenido en la posición correspondiente de la S-caja.
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: input   start ] */
+/* 1 */ sCaja:zeromatrix(16,16)$
+
+/* 2 */ for i:1 thru 16 do(
+            for j:1 thru 16 do(
+/* 3 */         gf_minimal_set(2,x^8+x^4+x^3+x+1),
+/* 4 */         pol:gf_n2p(((i-1)*16+j)-1),
+/* 5 */         inv: if pol=0 then 0 else gf_inv(pol),
+/* 6 */         gf_minimal_set(2,x^8+1),
+/* 7 */         p1:x^4+x^3+x^2+x+1,
+/* 7 */         p2:x^6+x^5+x+1, 
+/* 8 */         pol:gf_add(gf_mult(p1,inv),p2),
+/* 9 */         sCaja[i][j]:gf_p2n(pol)
+            )
+        )$
+
+sCaja;
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: title   start ]
+S-caja inversa
+   [wxMaxima: title   end   ] */
+
+/* [wxMaxima: comment start ]
+La S-caja inversa será la matriz que usemos para deshacer las substituciones que hagamos con S-caja. El procedimiento para
+generar la S-caja inversa es muy parecido al que se hace para generar la S-caja, salvo que en este caso las operaciones a 
+realizar en GF(2^8) son la resta del polinomio del polinomio en el cuerpo finito (que obtenemos con la función "gf_n2p") con
+el segundo polinomio (p2:x^6+x^5+x+1) y el resultado es dividido entre el primer polinomio (p1:x^4+x^3+x^2+x+1). El valor
+correspondiente a la S-caja inversa es el inverso del resultado de estas operaciones.
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: comment start ]
+Comentarios:
+    -1: comenzamos definiendo el cuerpo finito con el polinomio "x^8+1", igualmente con el método "gf_minimal_set".
+    -2: como ahora las operaciones a realizar con resta y división, las realizamos con las funciones "gf_sub" y "gf_div"
+        respectivamente.
+    -3: volvemos a cambiar el cuerpo finito en el que realizar las últimas operaciones.
+    -4: como el valor de la S-caja inverso es el inverso del polinomio obtenido, obtenemos ese valor con la función "gf_inv".
+    -5: finalmente solo nos queda asignar el valor a la posición correspondiente de la S-Caja inversa.
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: input   start ] */
+invSCaja:zeromatrix(16,16)$
+
+        for i:1 thru 16 do(
+            for j:1 thru 16 do(
+/* 1 */         gf_minimal_set(2,x^8+1),
+                pol:gf_n2p(((i-1)*16+j)-1),
+                p1:x^4+x^3+x^2+x+1,
+                p2:x^6+x^5+x+1, 
+/* 2 */         pol:gf_div(gf_sub(pol,p2),p1),
+/* 3 */         gf_minimal_set(2,x^8+x^4+x^3+x+1),
+/* 4 */         inv:if pol=0 then 0 else gf_inv(pol),
+/* 5 */         invSCaja[i][j]:gf_p2n(inv)
+    )
+)$
+
+invSCaja;
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: comment start ]
+Valores para la función rcon de la expansión de la clave
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: input   start ] */
+rcon:[1, 2, 4, 8, 16, 32, 64, 128, 27, 54];
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: title   start ]
+Transformación "AddRoundKey"
+   [wxMaxima: title   end   ] */
+
+/* [wxMaxima: comment start ]
+Consiste en sumar el estado que estamos cifrando con la clave de la ronda actual de cifrado.
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: comment start ]
+Parámetros:
+    estado: es la matriz que contiene el estado que estamos cifrando.
+    clave: es la matriz que contiene la clave de la ronda actual de la cifrado.
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: comment start ]
+Comentarios: para sumar las matrices en el cuerpo finito, primero pasamos ambas matrices a su equivalente polinomial dentro
+             del cuerpo con la función "mat_n2p", ahora las sumamos con la función "gf_matadd" y finalmente, convertimos el
+             resultado en una matriz de valores enteros correspondientes a la matriz de polinomios en el cuerpo.
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: input   start ] */
+addRoundKey(estado,clave):=mat_p2n(gf_matadd(mat_n2p(estado),mat_n2p(clave)))$
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: title   start ]
+Transformación "ByteSub"
+   [wxMaxima: title   end   ] */
+
+/* [wxMaxima: comment start ]
+Consiste en substituir un elemento de la matriz estado por un elemento de la matriz de la S-caja.
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: comment start ]
+Parámetros:
+    estado: es la matriz que contiene el estado que estamos cifrando.
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: comment start ]
+Comentarios: la substituciones se hacen en función del valor a substituir, que usaremos como indice para obtener el valor de
+             substitución. Como sabemos que la matriz de la S-caja tiene 16 filas y 16 columnas, para conocer el valor de 
+             substitución calcularemos su posición mediante la división; obtenemos la fila mediante la obtención del cociente
+             del valor indice (el valor a substituir de nuestra matriz estado) entre 16 y al resultado le sumaremos 1, porque
+             el índice de matrices comienza en 1 y no en 0, todo esto lo obtenemos usando la función "quotient"; para obtener
+             la columna volvemos a realizar la misma división, pero en este caso nos quedamos con el resto, sumándole también
+             1 por el mismo motivo anterior usando la función "remainder". Finalmente, almacenamos en la matriz de estado el
+             valor de substitución obtenido.
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: input   start ] */
+byteSub(estado):=block(
+    for i:1 thru 4 do(
+        for j:1 thru 4 do(
+            sub:sCaja[quotient(estado[i][j],16)+1][remainder(estado[i][j],16)+1],
+            estado[i][j]:sub
+        )
+    )
+)$
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: title   start ]
+Transformación "ByteSub" inversa
+   [wxMaxima: title   end   ] */
+
+/* [wxMaxima: comment start ]
+Consiste en substituir un elemento de la matriz estado por un elemento de la matriz de la S-caja inversa, esto nos permitirá
+precisamente deshacer la substitución hecha por la transformación anterior.
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: comment start ]
+Parámetros:
+    estado: es la matriz que contiene el estado que estamos cifrando.
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: comment start ]
+Comentarios: el procedimiento a seguir es exactamente el mismo que para la substitución usando la S-caja, la única diferencia
+             es que en este caso usaremos la S-caja inversa.
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: input   start ] */
+invByteSub(estado):=block(
+    for i:1 thru 4 do(
+        for j:1 thru 4 do(
+            sub:invSCaja[quotient(estado[i][j],16)+1][remainder(estado[i][j],16)+1],
+            estado[i][j]:sub
+        )
+    )
+)$
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: title   start ]
+Transformación "ShiftRow"
+   [wxMaxima: title   end   ] */
+
+/* [wxMaxima: comment start ]
+Consiste en desplazar los elementos hacia la izquierda de forma circular en función de la fila en la que se encuentren:
+    - En la fila 1 se hacen 0 desplazamientos.
+    - En la fila 2 se hacen 1 desplazamiento.
+    - En la fila 3 se hacen 2 desplazamientos.
+    - En la fila 4 se hacen 3 desplazamientos.
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: comment start ]
+Parámetros:
+    estado: es la matriz que contiene el estado que estamos cifrando.
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: comment start ]
+Comentarios: usando la función "genmatrix" generaremos una nueva matriz en la que cada fila sea el resultado de unir mediante
+             el método "append", los elementos de la fila menos los elementos a desplazar (los que obtenemos con la función
+             "rest") con los elementos desplazados (lo que también obtenemos con la función "rest").
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: input   start ] */
+shiftRow(estado):=genmatrix(lambda([i,j],append(rest(estado[i],i-1),rest(estado[i],i-5))[j]),4,4)$
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: title   start ]
+Transformación "ShiftRow" inversa
+   [wxMaxima: title   end   ] */
+
+/* [wxMaxima: comment start ]
+Consiste en deshacer lo que hacemos en la transformación anterior, por lo que en este caso:
+    - En la fila 1 se hacen 0 desplazamientos.
+    - En la fila 2 se hacen 3 desplazamiento.
+    - En la fila 3 se hacen 2 desplazamientos.
+    - En la fila 4 se hacen 1 desplazamientos.
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: comment start ]
+Parámetros:
+    estado: es la matriz que contiene el estado que estamos cifrando.
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: comment start ]
+Comentarios: el procedimiento es el mismo que en la transformación anterior, salvo que ahora el orden de en los que se
+             realizarán los desplazamientos estarán invertidos, por eso ahora los elementos que se restan están también
+             intercambiados.
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: input   start ] */
+invShiftRow(estado):=genmatrix(lambda([i,j],append(rest(estado[i],i-5),rest(estado[i],i-1))[j]),4,4)$
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: title   start ]
+Transformación "MixColums"
+   [wxMaxima: title   end   ] */
+
+/* [wxMaxima: comment start ]
+Consiste en multiplicar cada columna del estado por un polinomio constante c(x). Cada columna es tratada como un polinomio
+en GF(2^8) y es multiplicada modulo x^4+1 con el polinomio fijo c(x):3*x^3+x^2+x+2.
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: comment start ]
+Parámetros:
+    estado: es la matriz que contiene el estado que estamos cifrando.
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: comment start ]
+Comentarios:
+    -1: lo primero es pasar los valores de nuestra matriz estado a polinomios en GF(2^8) para poder operar con ellos y hacer
+        las multiplicaciones de polinomios. Para ellos usamos la función "mat_n2p" del paquete "gf" que dada una matriz de
+        valores numéricos, devuelve su matriz polinomial equivalentes para el cuerpo finito definido.
+    -2: ahora generamos la matriz por la que vamos a multiplicar nuestro estado. Será una matriz circular de distancia máxima 
+        separable cuyos valores corresponden a los coeficientes del polinomio constante:
+            2     -> 2
+            x     -> 1
+            x^2   -> 1
+            3*x^3 -> 3
+    -3: procedemos a ir añadiendo las columnas resultantes a la matriz final según vayamos multiplicando las columnas de la
+        matriz constante y la matriz estado. La multiplicación la haremos con la función "gf_matmult" del paquete "gf".
+    -4: solo nos queda hacer el paso inverso al primer paso que hicimos y transformar la matriz de polinonimos en un matriz
+        de valores enteros. En este caso usaremos la función "mat_n2p" del paquete "gf" para realizar dicha conversión. 
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: input   start ] */
+mixColumns(estado):=block([m_mezcla],
+    /* 1 */ estado: mat_n2p(estado),
+            m_mezcla: matrix(),
+
+
+    /* 2 */ m_columnas: mat_n2p(matrix(
+
+
+                [2,3,1,1], 
+
+
+                [1,2,3,1], 
+
+
+                [1,1,2,3], 
+
+
+                [3,1,1,2])),
+
+
+    /* 3 */ for i:1 thru 4 do 
+
+
+                m_mezcla:addcol(m_mezcla,gf_matmult(m_columnas,col(estado,i))),
+
+
+    /* 4 */ mat_p2n(m_mezcla)
+)$
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: title   start ]
+Transformación "MixColums" inversa
+   [wxMaxima: title   end   ] */
+
+/* [wxMaxima: comment start ]
+Consiste en deshacer lo que hace la función anterior. Para ello cada columna será multiplicada en este caso por el inverso
+del polinomio c(x):3*x^3+x^2+x+2, que es c^(-1)(x):11*x^3+13*x^2+9*x+14.
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: comment start ]
+Parámetros:
+    estado: es la matriz que contiene el estado que estamos cifrando.
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: comment start ]
+Comentarios:
+    -1: como en este caso la matriz constante por la que vamos a multiplicar nuestra matriz estado es la inversa de la matriz
+        de la transformación anterior, generamos dicha matriz a partir de la otra matriz calculando su inverso con el método
+        "gf_matinv" del paquete "gf".
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: input   start ] */
+invMixColumns(estado):=block([m_mezcla],
+            estado: mat_n2p(estado),
+            m_mezcla: matrix(),
+    /* 1 */ m_columnas: gf_matinv(mat_n2p(matrix(
+
+
+                [2, 3, 1, 1], 
+
+
+                [1, 2, 3, 1], 
+
+
+                [1, 1, 2, 3], 
+
+
+                [3, 1, 1, 2]))),
+            for i:1 thru 4 do 
+                m_mezcla: addcol(m_mezcla,gf_matmult(m_columnas,col(estado,i))),
+            mat_p2n(m_mezcla)
+)$
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: comment start ]
+Función que calcula la posición de una celda de una matriz en fila y columna
+(Por ejemplo la celda 12 en una matriz 4x4 devolvería fila 3 columna 4)
+n es la posición de la celda, nfilas es el número de filas de la matriz a estudiar,
+ncolumnas es el número de columnas de la matriz a estudiar, y fila y columna son las salidas
+de la función
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: input   start ] */
+calcularFilaYColumna(n,nfilas,ncolumnas):=block(
+    contador:1,
+        for i:1 thru nfilas do(
+            for j:1 thru ncolumnas do(
+                if contador = n then(
+                    pos[1]:i,
+                    pos[2]:j,
+                    i:nfilas,
+                    j:ncolumnas
+                )else contador:contador+1
+            )
+        ),
+    pos
+ )$
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+pos:calcularFilaYColumna(4,2,3);
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+pos[1];
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: comment start ]
+Función que genera la extensión de la clave K
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: input   start ] */
+rijndaelKeySched(k,W):=block([KC:4,BC:4,ROUNDS:10,t:1,rconpointer:0,tk,i:1,j:1],
+    tk:zeromatrix(4,4),fila:1,columna:1,
+    for j:1 thru KC do(
+        for i:1 thru 4 do(
+            tk[i][j]:k[i][j]
+        )
+    ),
+    while (j<KC+1) and (t<(ROUNDS+1)*BC) do(
+        for i:1 thru 4 do(
+            posiciones:calcularFilaYColumna(t,10,4),
+            W[fila][i][columna]=tk[i][j],
+            t:t+1,
+            j:j+1 
+        )         
+    ),
+    while (t<(ROUNDS+1)*BC) do(
+        for i:1 thru 4 do(
+            posiciones:calcularFilaYColumna(tk[mod((i+1),4)+1][KC-1],4,4),          
+            tk[i][1]:bit_xor(tk[i][1],s[posiciones[1]][posiciones[2]])
+         
+        ),
+        rconpointer:rconpointer+1,
+        posiciones:calcularFilaYColumna(rconpointer,4,4),
+        tk[1][1]:bit_xor(tk[1][1],rcon[posiciones[1]][posiciones[2]]),
+        for j:1 thru KC do(
+            for i:1 thru 4 do(  
+                tk[i][j]:bit_xor(tk[i][j],tk[i][j]),print(tk[i][j])
+            )
+        ),
+        j:1,t:1,
+        while (j<KC) and (t<(ROUNDS+1)*BC) do(
+            for i:1 thru 4 do(                
+                posiciones:calcularFilaYColumna(t,10,4),
+                W[posiciones[1]][i][posiciones[2]]=tk[i][j],
+                j:j+1,
+                t:t+1
+             )
+        )
+    )
+)$
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: comment start ]
+Procedimiento para cifrar
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: input   start ] */
+rijndaelEncrypt(a,rk):=block([BC:4,ROUNDS:10,B,X,Y,XE],
+    addRoundKey(a,rk[1]),
+    for r:1 thru ROUNDS do(
+        byteSub(a,s),
+        shiftRow(a),
+        mixColumns(a,BC),
+        addRoundKey(a,rk[r])
+    ),
+    byteSub(a,s),
+    shiftRow(a),
+    addRoundKey(a,rk[ROUNDS])
+)$
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: comment start ]
+Procedimiento para descifrar
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: input   start ] */
+rijndaelDecrypt(a,rk):=block([BC:4,ROUNDS:10],
+    addRoundKey(a,rk[ROUNDS]),
+    byteSub(a,inv_s),
+    shiftRow(a),
+    for r:(ROUNDS) step -1 thru 1 do(
+        addRoundKey(a,rk[r]),
+        invMixColumns(a,BC),
+        byteSub(a,inv_s),
+        shiftRow(a)
+    ),
+    addRoundKey(a,rk[1])
+)$
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: comment start ]
+Main
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: input   start ] */
+generarEstado(texto):=block([estado,i:1,j:1],
+    estado: zeromatrix(4,4),
+    for char in map('cint, charlist(texto)) do(
+        estado[i,j]:char,
+        i:i+1,
+        if i=5 then(
+            i:1,
+            j:j+1
+        )
+    ),
+    estado)$
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: comment start ]
+AES opera en matrices de 4x4
+   [wxMaxima: comment end   ] */
+
+/* [wxMaxima: input   start ] */
+clave:matrix([43,40,171,9],[126,174,247,207],[21,210,21,79],[22,166,136,60]);
+a:generarEstado("Hola amigo");
+W:genmatrix(lambda([i,j],[0,0,0,0]),1,10);
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+rijndaelKeySched(clave,W);
+/* [wxMaxima: input   end   ] */
+
+/* [wxMaxima: input   start ] */
+rijndaelEncrypt(A, W);
+/* [wxMaxima: input   end   ] */
+
+/* Maxima can't load/batch files which end with a comment! */
+"Created with wxMaxima"$
